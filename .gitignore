@@ -1,0 +1,16 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+
+# Data files
+*.csv
+*.pkl
+*.onnx
+
+# OS
+.DS_Store
+Thumbs.db
