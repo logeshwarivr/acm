@@ -50,6 +50,40 @@ function drawGroundTrack(data) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
   }
+  
+  // ── Terminator (day/night boundary) ──────────────────────
+  function getSunLatLon() {
+    const d = (Date.now() - Date.UTC(2000,0,1,12)) / 86400000;
+    const L = (280.46 + 0.9856474 * d) % 360;
+    const g = (357.528 + 0.9856003 * d) % 360;
+    const lam = L + 1.915*Math.sin(g*Math.PI/180) + 0.02*Math.sin(2*g*Math.PI/180);
+    const eps = 23.439 - 0.0000004 * d;
+    const sinDec = Math.sin(eps*Math.PI/180) * Math.sin(lam*Math.PI/180);
+    const dec = Math.asin(sinDec) * 180/Math.PI;
+    const ra = Math.atan2(Math.cos(eps*Math.PI/180)*Math.sin(lam*Math.PI/180),
+                          Math.cos(lam*Math.PI/180)) * 180/Math.PI;
+    const lon = ra - (280.46061837 + 360.98564736629*d) % 360;
+    return { lat: dec, lon: ((lon+180)%360)-180 };
+  }
+
+  const sun = getSunLatLon();
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,30,0.45)';
+  ctx.beginPath();
+  let firstT = true;
+  for (let ix = 0; ix <= W; ix += 3) {
+    const lon = (ix / W) * 360 - 180;
+    const termLat = Math.atan2(
+      -Math.cos((lon - sun.lon) * Math.PI/180),
+      Math.tan(sun.lat * Math.PI/180)
+    ) * 180/Math.PI;
+    const [tx, ty] = latLonToXY(termLat, lon);
+    if (firstT) { ctx.moveTo(tx, ty); firstT = false; }
+    else ctx.lineTo(tx, ty);
+  }
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 
   // ── Equator and prime meridian ────────────────────────────
   ctx.strokeStyle = 'rgba(255,255,255,0.15)';
@@ -71,8 +105,9 @@ function drawGroundTrack(data) {
   // ── Satellite trails + dots ───────────────────────────────
   data.satellites.forEach(sat => {
     if (!satTrails[sat.id]) satTrails[sat.id] = [];
-    satTrails[sat.id].push({ lat: sat.lat, lon: sat.lon });
-    if (satTrails[sat.id].length > 90) satTrails[sat.id].shift();
+    satTrails[sat.id].push({ lat: sat.lat, lon: sat.lon, t: Date.now() });
+    const cutoff = Date.now() - 90 * 60 * 1000;
+    satTrails[sat.id] = satTrails[sat.id].filter(p => p.t > cutoff);
 
     const color = sat.status === 'NOMINAL'  ? '#00ff88'
                 : sat.status === 'EVADING'  ? '#ffaa00'
@@ -97,6 +132,23 @@ function drawGroundTrack(data) {
         }
       }
     }
+    // Predicted trajectory (dashed, next 90 min)
+    ctx.save();
+    ctx.setLineDash([4, 6]);
+    ctx.strokeStyle = 'rgba(100,200,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const STEPS = 60;
+    for (let s = 0; s <= STEPS; s++) {
+      const dt = s * (90 * 60 / STEPS); // seconds ahead
+      // LEO: ~360deg / 5400s orbital period ≈ 0.0667 deg/s longitude
+      const futureLon = ((sat.lon + 0.0667 * dt) + 180) % 360 - 180;
+      const futureLat = sat.lat * Math.cos((s / STEPS) * Math.PI * 2); // sinusoidal approx
+      const [px, py] = latLonToXY(futureLat, futureLon);
+      s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.restore();
 
     // Dot with glow effect
     const [x, y] = latLonToXY(sat.lat, sat.lon);
