@@ -10,8 +10,8 @@ function drawHeatmap(data) {
   const sats = data.satellites;
   if (!sats.length) return;
 
-  const barW = Math.min(60, (W - 40) / sats.length - 10);
-  const maxH = H - 60;
+  const barW = Math.min(50, (W - 40) / sats.length - 10);
+  const maxH = Math.min(H - 60, 120);
 
   sats.forEach((sat, i) => {
     const fuelPct = sat.fuel_kg / 50.0;
